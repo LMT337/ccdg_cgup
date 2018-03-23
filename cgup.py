@@ -1,7 +1,7 @@
 import os, csv, glob, datetime, subprocess, getpass, socket
 from shutil import copyfile
 
-working_dir = '/gscmnt/gc2783/qc/CCDGWGS2018/dev'
+working_dir = '/gscmnt/gc2783/qc/CCDGWGS2018/'
 os.chdir(working_dir)
 
 date = datetime.datetime.now().strftime("%m-%d-%y")
@@ -43,6 +43,7 @@ def workflow_create(woid):
         workflow_write.writerows([workflow])
     return workflow_outfile
 
+
 # query data base for collections id
 def assign_collections(woid):
 
@@ -75,6 +76,28 @@ def header_fix(compute_workflow_file):
         os.rename(temp_file, compute_workflow_file)
 
         return
+
+
+# all collections to all file in attachments dir
+def add_collections_allfile(all_file, collection):
+
+    all_temp_file = all_file + '.temp'
+
+    with open(all_file, 'r') as all_filecsv, open(all_temp_file, 'w') as all_temp_filecsv:
+        all_file_reader = csv.DictReader(all_filecsv, delimiter='\t')
+        header = all_file_reader.fieldnames
+        header.append('Admin Project')
+
+        all_temp_file_writer = csv.DictWriter(all_temp_filecsv, fieldnames=header, delimiter='\t')
+        all_temp_file_writer.writeheader()
+
+        for line in all_file_reader:
+            line['Admin Project'] = collection
+            all_temp_file_writer.writerow(line)
+
+    os.rename(all_temp_file, all_file)
+
+    return all_file
 
 
 while True:
@@ -110,7 +133,7 @@ while True:
 
     print('\nStarting QC on {} topup.\n'.format(woid))
 
-    #mk new woid directory/chg dir
+    # mk new woid directory/chg dir
     os.makedirs(woid)
     os.chdir(woid)
     woid_dir = os.getcwd()
@@ -134,32 +157,35 @@ while True:
     qc_dir_path = os.getcwd()
     print('{} QC directory:\n{}\n'.format(woid, qc_dir_path))
 
-
     # run qc scripts in qc dir
     ccdg_out = woid + '.' + sample_number + '.' + mm_dd_yy
 
-    # subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/qc.build38.topmed.py", "--tm", workflow_outfile, topmed_out])
-    subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/qc.build38.ccdgnew.py", "--ccdg", workflow_outfile, ccdg_out])
+    subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/qc.build38.ccdgnew.py", "--ccdg",
+                    workflow_outfile, ccdg_out])
 
     ccdg_all = woid + '.' + sample_number + '.' + mm_dd_yy + '.build38.all.tsv'
     ccdg_report = woid + '.' + sample_number + '.' + mm_dd_yy + '.report'
-    # subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/qc.build38.topmed.reportmaker.py", "--tm", topmed_all, topmed_report])
 
     # qc.build38.topmed.reportmaker.py
     qc_report = subprocess.check_output(["/gscuser/zskidmor/bin/python3",
                                          "/gscuser/awollam/aw/qc.build38.reportmaker.py", "--ccdg", ccdg_all,
                                          ccdg_report]).decode('utf-8').splitlines()
 
+    print('\n-------\nRunning tkb.py\n-------\n')
+    subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/tkb.py"])
+
     # mk attachments dirs cp all, fail, metrics, samplemap to attachments dir
     os.makedirs('attachments')
     print('Attachments:')
+
+    copyfile(ccdg_report, 'attachments/'+ccdg_report)
 
     copyfile(ccdg_all, 'attachments/'+ccdg_all)
     print('{} - contains all the stats for samples that have been QCed'.format(ccdg_all))
 
     samplemap = ccdg_out + '.qcpass.samplemap.tsv'
     num_samplemap_lines = sum(1 for line in open(samplemap))
-    if num_samplemap_lines > 1:
+    if num_samplemap_lines >= 1:
         copyfile(samplemap, 'attachments/'+samplemap)
         print('{} - contains the file paths to QC passed samples'.format(samplemap))
 
@@ -170,13 +196,9 @@ while True:
         print('{} - contains the stats for failed samples'.format(ccdg_fail))
 
     os.chdir('attachments')
+    add_collections_allfile(ccdg_all, collection)
     att_dir = os.getcwd()
     print('\nAttachments directory:\n{}\n'.format(att_dir))
 
-    # write correct attachment footer and scp command to file in attachments
-
-
-
-
     # scp link
-    print('\nscp link:\nscp {}@{}:{}/*.tsv .'.format(user,host,att_dir))
+    print('scp link:\nscp {}@{}:{}/*.tsv .'.format(user,host,att_dir))
