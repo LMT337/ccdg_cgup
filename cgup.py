@@ -29,8 +29,18 @@ for woid in filter(is_int, woid_dirs_unfiltered):
     woid_dirs.append(woid)
 
 
+# write workflow lines to workflow file
+def workflow_write(workflow, woid):
+    workflow_file = woid + '.workflow.' + mm_dd_yy + '.tsv'
+
+    with open(workflow_file, 'w') as wfoutcsv:
+        workflow_writer = csv.writer(wfoutcsv, delimiter='\n')
+        workflow_writer.writerows([workflow])
+
+    return workflow_file
+
+
 def workflow_create(woid):
-    workflow_outfile = woid + '.workflow.' + mm_dd_yy + '.tsv'
     workflow = []
     while True:
         workflow_line = input()
@@ -38,11 +48,7 @@ def workflow_create(woid):
             workflow.append(workflow_line)
         else:
             break
-    with open(workflow_outfile, 'w') as wfoutcsv:
-        workflow_write = csv.writer(wfoutcsv, delimiter='\n')
-        workflow_write.writerows([workflow])
-    return workflow_outfile
-
+    return workflow
 
 # query data base for collections id
 def assign_collections(woid):
@@ -145,7 +151,19 @@ while True:
     print('Input samples:')
 
     # user enter lims sample info output to woid.workflow.date.tsv
-    workflow_outfile = workflow_create(woid)
+    workflow_list = workflow_create(woid)
+
+    while True:
+        if len(workflow_list) <= 1:
+            print('Header or samples missing.\nInput samples:')
+            workflow_list = workflow_create(woid)
+        if 'Sample Full Name' not in workflow_list[0]:
+            print('Header is incorrect. Missing Sample Full Name.\nInput samples:')
+            workflow_list = workflow_create(woid)
+        else:
+            break
+
+    workflow_outfile = workflow_write(workflow_list, woid)
     header_fix(workflow_outfile)
     print('Samples added to {}\n'.format(workflow_outfile))
 
@@ -176,12 +194,21 @@ while True:
 
     # mk attachments dirs cp all, fail, metrics, samplemap to attachments dir
     os.makedirs('attachments')
+    qc_dir_name = os.path.basename(qc_dir).split('.')[1:]
+    qc_file_prefix = woid + '.' + qc_dir_name[0] + '.' + qc_dir_name[1]
+
+    os.rename(qc_file_prefix + '.build38.all.tsv', qc_file_prefix + '.build38.all.tsv.backup')
+    os.rename(qc_file_prefix + '.build38.totalBasesKB.tsv', qc_file_prefix + '.build38.all.tsv')
+
     print('Attachments:')
 
     copyfile(ccdg_report, 'attachments/'+ccdg_report)
 
     copyfile(ccdg_all, 'attachments/'+ccdg_all)
     print('{} - contains all the stats for samples that have been QCed'.format(ccdg_all))
+
+    os.rename(qc_file_prefix + '.build38.all.tsv', qc_file_prefix + '.build38.totalBasesKB.tsv')
+    os.rename(qc_file_prefix + '.build38.all.tsv.backup', qc_file_prefix + '.build38.all.tsv')
 
     samplemap = ccdg_out + '.qcpass.samplemap.tsv'
     num_samplemap_lines = sum(1 for line in open(samplemap))
@@ -196,9 +223,10 @@ while True:
         print('{} - contains the stats for failed samples'.format(ccdg_fail))
 
     os.chdir('attachments')
+
     add_collections_allfile(ccdg_all, collection)
     att_dir = os.getcwd()
     print('\nAttachments directory:\n{}\n'.format(att_dir))
 
     # scp link
-    print('scp link:\nscp {}@{}:{}/*.tsv .'.format(user,host,att_dir))
+    print('scp link:\nscp {}@{}:{}/* .'.format(user,host,att_dir))
