@@ -108,6 +108,8 @@ def add_collections_allfile(all_file, collection):
 
 while True:
 
+    os.chdir(working_dir)
+    
     # enter woid, check to see if it doesn't exist
     woid = input('**CCDG Topup QC**\nwoid: (enter to exit)\n').strip()
 
