@@ -105,6 +105,24 @@ def add_collections_allfile(all_file, collection):
     return all_file
 
 
+def create_dir_file(workflow_outfile, woid):
+
+    dir_outfile = woid + '.working.directory.tsv'
+    dir_file_header = ['Working Directory']
+
+    with open(workflow_outfile, 'r') as workflowcsv, open(dir_outfile, 'w') as outfilecsv:
+        workflow_reader = csv.DictReader(workflowcsv, delimiter='\t')
+        dir_writer = csv.DictWriter(outfilecsv, fieldnames=dir_file_header, delimiter='\t')
+        dir_writer.writeheader()
+        results = {}
+
+        for line in workflow_reader:
+            results['Working Directory'] = line['Working Directory']
+            dir_writer.writerow(results)
+
+    return dir_outfile
+
+
 while True:
 
     os.chdir(working_dir)
@@ -176,11 +194,16 @@ while True:
     qc_dir_path = os.getcwd()
     print('{} QC directory:\n{}\n'.format(woid, qc_dir_path))
 
+    dir_file = create_dir_file(workflow_outfile, woid)
+    os.makedirs('yaml')
     # run qc scripts in qc dir
     ccdg_out = woid + '.' + sample_number + '.' + mm_dd_yy
 
-    subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/qc.build38.ccdgnew.py", "--ccdg",
-                    workflow_outfile, ccdg_out])
+    # yaml create
+    subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/yamparse.py", dir_file, 'yaml/'])
+
+    subprocess.run(["/gscuser/zskidmor/bin/python3", "/gscuser/awollam/aw/qc.build38.ccdgnew.py", "--ccdg", "--dir",
+                    'yaml/', workflow_outfile, ccdg_out])
 
     ccdg_all = woid + '.' + sample_number + '.' + mm_dd_yy + '.build38.all.tsv'
     ccdg_report = woid + '.' + sample_number + '.' + mm_dd_yy + '.report'
